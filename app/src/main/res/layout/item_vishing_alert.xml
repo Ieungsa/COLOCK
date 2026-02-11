@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/card_background"
+    android:layout_margin="8dp"
+    android:padding="16dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- 상단 정보 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- 읽지 않음 표시 -->
+        <View
+            android:id="@+id/unread_indicator"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/unread_indicator"
+            android:layout_marginEnd="8dp"
+            android:visibility="gone" />
+
+        <!-- 시간 -->
+        <TextView
+            android:id="@+id/text_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="12/25 14:30"
+            android:textSize="12sp"
+            android:textColor="#4A5568"
+            android:layout_marginEnd="8dp" />
+
+        <!-- 전화번호 -->
+        <TextView
+            android:id="@+id/text_phone_number"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="010-1234-5678"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <!-- 위험 등급 -->
+        <TextView
+            android:id="@+id/text_risk_level"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="매우 위험"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="@drawable/risk_badge_background"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp"
+            android:layout_marginEnd="8dp" />
+
+        <!-- 삭제 버튼 -->
+        <TextView
+            android:id="@+id/delete_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🗑️"
+            android:textSize="16sp"
+            android:padding="4dp"
+            android:clickable="true"
+            android:focusable="true" />
+
+    </LinearLayout>
+
+    <!-- 받아쓰기 미리보기 -->
+    <TextView
+        android:id="@+id/text_transcription_preview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="금융위원회입니다. 고객님의 계좌가 불법 거래에 연루되어..."
+        android:textSize="14sp"
+        android:textColor="#000000"
+        android:layout_marginTop="8dp"
+        android:maxLines="2"
+        android:ellipsize="end" />
+
+    <!-- 감지된 키워드 -->
+    <TextView
+        android:id="@+id/text_keywords"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🔍 금융위원회, 계좌이체, 안전계좌"
+        android:textSize="12sp"
+        android:textColor="#D69E2E"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/url_background"
+        android:padding="4dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:visibility="visible" />
+
+</LinearLayout>

@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">COLOCK</string>
+    <string name="accessibility_service_description">스미싱 방지를 위해 문자 앱에서 위험한 링크를 감지하고 경고합니다.</string>
+    <string name="notification_channel_name">피싱 보호</string>
+    <string name="notification_channel_desc">피싱 링크 감지 알림</string>
+    <string name="service_notification_title">COLOCK 보호 중</string>
+    <string name="service_notification_text">피싱 링크를 실시간으로 감지하고 있습니다.</string>
+    <string name="phishing_detected_title">⚠️ 위험한 링크 감지</string>
+    <string name="phishing_detected_message">의심스러운 피싱 링크가 포함된 문자를 받았습니다</string>
+</resources>

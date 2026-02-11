@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- Brand Colors (Bright & Professional) -->
+    <color name="primary_blue">#3B82F6</color> <!-- Bright Blue -->
+    <color name="primary_dark">#2563EB</color>
+    <color name="primary_light">#93C5FD</color>
+    <color name="accent_blue">#EFF6FF</color> <!-- Very Light Blue for backgrounds -->
+    
+    <color name="secondary_teal">#14B8A6</color>
+    <color name="secondary_purple">#8B5CF6</color>
+    
+    <!-- Backgrounds -->
+    <color name="background_main">#F8FAFC</color> <!-- Very Light Gray/White -->
+    <color name="surface_card">#FFFFFF</color>
+    
+    <!-- Gradient for Header (Bright) -->
+    <color name="gradient_start">#3B82F6</color>
+    <color name="gradient_end">#60A5FA</color>
+    
+    <!-- Text -->
+    <color name="text_primary">#1E293B</color> <!-- Dark Slate -->
+    <color name="text_secondary">#64748B</color> <!-- Gray -->
+    <color name="text_on_primary">#FFFFFF</color>
+    
+    <!-- Status -->
+    <color name="status_safe">#10B981</color> <!-- Emerald -->
+    <color name="status_safe_bg">#D1FAE5</color>
+    <color name="status_success">#10B981</color> <!-- Same as status_safe -->
+    <color name="status_warning">#F59E0B</color>
+    <color name="status_danger">#EF4444</color>
+
+    <!-- Chip Specific Colors (Softer/Less Saturated) -->
+    <color name="chip_selected_blue">#E0E7FF</color> <!-- Much lighter blue background for selected -->
+    <color name="chip_stroke_light">#F1F5F9</color> <!-- Very faint stroke -->
+    <color name="chip_text_selected">#000000</color> <!-- Pure black for selected -->
+    <color name="chip_text_unselected">#94A3B8</color> <!-- Muted grey for unselected -->
+</resources>

@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 브라우저 앱 가시성 선언 (Android 11+) -->
+    <queries>
+        <!-- Chrome -->
+        <package android:name="com.android.chrome" />
+        <!-- Samsung Internet -->
+        <package android:name="com.sec.android.app.sbrowser" />
+        <package android:name="com.sec.android.app.sbrowser.beta" />
+        <!-- Firefox -->
+        <package android:name="org.mozilla.firefox" />
+        <!-- Edge -->
+        <package android:name="com.microsoft.emmx" />
+        <!-- Opera -->
+        <package android:name="com.opera.browser" />
+        <!-- Brave -->
+        <package android:name="com.brave.browser" />
+
+        <!-- 또는 모든 브라우저를 위한 인텐트 필터 -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="http" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <!-- SMS/MMS 관련 권한 -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_MMS" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    
+    <!-- VoiceGuard (Ieungsa) 통합 권한 -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- 주의: MANAGE_EXTERNAL_STORAGE는 구글 플레이 정책상 특별한 사유가 필요함 -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
+    
+    <!-- 오버레이 권한 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    
+    <!-- 접근성 서비스 권한 -->
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
+    
+    <!-- 인터넷 권한 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- 데이터 유출 보호 관련 권한 -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+    
+    <!-- 알림 권한 (안드로이드 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 진동 권한 -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    
+    <!-- 전체화면 알림 권한 (안드로이드 10+) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    
+    <!-- 포그라운드 서비스 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" /> <!-- 마이크용 추가 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.COLOCK">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Smishing 보호 액티비티 -->
+        <activity
+            android:name=".SmishingActivity"
+            android:exported="false"
+            android:label="Smishing 보호" />
+
+        <!-- 차단된 위협 기록 액티비티 -->
+        <activity
+            android:name=".ThreatHistoryActivity"
+            android:exported="false"
+            android:label="차단된 위협" />
+
+        <!-- 위험 문자 기록 액티비티 -->
+        <activity
+            android:name=".PhishingHistoryActivity"
+            android:exported="false"
+            android:label="위험 문자 기록" />
+
+        <!-- 보이스피싱 보호 액티비티 -->
+        <activity
+            android:name=".VishingActivity"
+            android:exported="false"
+            android:label="VoiceGuard 보호" />
+
+        <!-- 보이스피싱 기록 액티비티 -->
+        <activity
+            android:name=".VishingHistoryActivity"
+            android:exported="false"
+            android:label="보이스피싱 기록" />
+
+        <!-- 가족 상호 인증 액티비티 -->
+        <activity
+            android:name=".FamilyVerifyActivity"
+            android:exported="false"
+            android:label="가족 상호 인증" />
+
+        <!-- 가족 인증 기록 액티비티 -->
+        <activity
+            android:name=".FamilyVerifyHistoryActivity"
+            android:exported="false"
+            android:label="인증 요청 기록" />
+
+        <!-- 데이터 유출 보호 액티비티 -->
+        <activity
+            android:name=".DataLeakActivity"
+            android:exported="false"
+            android:label="데이터 유출 보호" />
+
+        <!-- 데이터 유출 기록 액티비티 -->
+        <activity
+            android:name=".DataLeakHistoryActivity"
+            android:exported="false"
+            android:label="데이터 유출 기록" />
+
+        <!-- 데이터 유출 경고 전체화면 액티비티 -->
+        <activity
+            android:name=".DataLeakAlertActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+
+        <!-- 설정 액티비티 -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="설정" />
+
+        <!-- 전체 화면 알림 액티비티 -->
+        <activity
+            android:name=".FullscreenAlertActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            tools:ignore="AppLinkUrlError" />
+			
+        <!-- URL 클릭 차단을 위한 인터셉트 액티비티 -->
+        <activity
+            android:name=".UrlInterceptActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Transparent"
+            android:launchMode="singleTask">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+        </activity>
+
+        <!-- SMS 수신 BroadcastReceiver (정적 선언) -->
+        <receiver android:name=".SmsReceiver"
+            android:permission="android.permission.BROADCAST_SMS"
+            android:exported="true">
+            <intent-filter android:priority="2147483647">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 접근성 서비스 -->
+        <service android:name=".OverlayAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- 포그라운드 서비스 -->
+        <service android:name=".PhishingProtectionService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
+        <!-- VoiceGuard CallMonitor Service (Ieungsa 통합) -->
+        <service
+            android:name=".voiceguard.CallMonitorService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <!-- DataLeak Monitor Service -->
+        <service
+            android:name=".DataLeakMonitorService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Firebase Messaging Service -->
+        <service
+            android:name=".MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+    </application>
+
+</manifest>
