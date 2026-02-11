@@ -1,0 +1,1008 @@
+================================================================================
+🛡️ 보이스피싱 방어 앱 개발 가이드 (Claude Code용)
+================================================================================
+
+프로젝트 이름: VoiceGuard (보이스가드)
+목적: 통화 중 음성 변조 실시간 탐지 → 보이스피싱 예방
+
+
+================================================================================
+📋 1. 프로젝트 개요
+================================================================================
+
+앱 기능:
+- 통화 시작 자동 감지
+- 백그라운드에서 음성 분석
+- 0-100Hz 대역 loudness 측정
+- 변조 음성 탐지 시 즉시 알림
+- 통화 기록 및 통계 제공
+
+
+================================================================================
+🎯 2. 핵심 탐지 알고리즘 (Python에서 검증 완료)
+================================================================================
+
+탐지 원리:
+- 정상 목소리: 0-100Hz 대역 loudness ≈ 0.0000 ~ 0.0010
+- 변조 목소리: 0-100Hz 대역 loudness ≈ 0.0015 ~ 0.0050
+- 임계값: 0.003
+
+판별 로직:
+1. 통화 음성을 0.5초 단위로 캡처
+2. FFT(Fast Fourier Transform)로 주파수 분석
+3. 0-100Hz 대역 평균 loudness 계산
+4. 임계값(0.003) 초과 시 → 변조 판정
+5. 연속 3회 이상 탐지 시 → 알림 발생
+
+검증 결과:
+- 정확도: 100% (테스트 데이터)
+- 교차 검증: 98.5%
+- 실시간 처리 시간: 약 6-7ms
+- 오탐률: 매우 낮음
+
+
+================================================================================
+🏗️ 3. 안드로이드 앱 아키텍처
+================================================================================
+
+언어: Kotlin
+최소 SDK: Android 8.0 (API 26)
+타겟 SDK: Android 14 (API 34)
+
+주요 컴포넌트:
+
+1. MainActivity.kt
+   - 메인 화면
+   - 서비스 시작/중지
+   - 통계 표시
+
+2. CallMonitorService.kt (ForegroundService)
+   - 통화 상태 감지
+   - 백그라운드 실행
+   - VoiceAnalyzer 호출
+
+3. VoiceAnalyzer.kt
+   - 오디오 캡처 (AudioRecord)
+   - FFT 처리
+   - 0-100Hz loudness 계산
+   - 변조 판별
+
+4. AlertManager.kt
+   - 알림 생성 및 표시
+   - 진동/소리
+   - 오버레이 경고창
+
+5. DatabaseHelper.kt (선택)
+   - 통화 기록 저장
+   - 통계 계산
+
+
+================================================================================
+📱 4. 필수 권한 (AndroidManifest.xml)
+================================================================================
+
+<uses-permission android:name="android.permission.READ_PHONE_STATE" />
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+<uses-permission android:name="android.permission.VIBRATE" />
+
+<!-- Android 10+ 통화 음성 접근 -->
+<uses-permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT" 
+                 android:maxSdkVersion="33" />
+
+<!-- 오버레이 표시 (선택) -->
+<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+<!-- Accessibility Service 등록 (통화 음성 접근용) -->
+<service
+    android:name=".VoiceAccessibilityService"
+    android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+    </intent-filter>
+</service>
+
+
+================================================================================
+💻 5. 핵심 코드 구조
+================================================================================
+
+----- VoiceAnalyzer.kt -----
+
+class VoiceAnalyzer {
+    private val SAMPLE_RATE = 44100  // 44.1kHz
+    private val CHUNK_SIZE = 1024    // 버퍼 크기
+    
+    // FFT 라이브러리: JTransforms 또는 KissFFT
+    
+    fun analyzeLoudness(audioFrame: ShortArray): Float {
+        // 1. Short → Float 변환
+        val floatData = audioFrame.map { it.toFloat() / 32768f }
+        
+        // 2. FFT 수행
+        val fftMagnitude = performFFT(floatData)
+        
+        // 3. 0-100Hz 인덱스 계산
+        // freq = index * (SAMPLE_RATE / CHUNK_SIZE)
+        // 100Hz = index * (44100 / 1024) ≈ index * 43.07
+        // maxIndex = 100 / 43.07 ≈ 2.32 → 2
+        val maxIndex = (100 * CHUNK_SIZE / SAMPLE_RATE).toInt()
+        
+        // 4. 0-100Hz 평균 계산
+        var sum = 0f
+        for (i in 0..maxIndex) {
+            sum += fftMagnitude[i]
+        }
+        
+        return sum / (maxIndex + 1)
+    }
+    
+    fun isModulated(loudness: Float): Boolean {
+        return loudness >= 0.003f
+    }
+    
+    private fun performFFT(data: List<Float>): FloatArray {
+        // JTransforms 사용 예시:
+        // val fft = DoubleFFT_1D(data.size.toLong())
+        // val buffer = DoubleArray(data.size * 2)
+        // ... FFT 계산
+        // return magnitude array
+    }
+}
+
+
+----- CallMonitorService.kt -----
+
+class CallMonitorService : Service() {
+    private var audioRecord: AudioRecord? = null
+    private val analyzer = VoiceAnalyzer()
+    private val detectionBuffer = mutableListOf<Boolean>()
+    
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Foreground notification
+        startForeground(NOTIFICATION_ID, createNotification())
+        
+        // 통화 감지 리스너 등록
+        val telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
+        telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE)
+        
+        return START_STICKY
+    }
+    
+    private val phoneStateListener = object : PhoneStateListener() {
+        override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+            when (state) {
+                TelephonyManager.CALL_STATE_OFFHOOK -> {
+                    // 통화 시작
+                    startVoiceAnalysis()
+                }
+                TelephonyManager.CALL_STATE_IDLE -> {
+                    // 통화 종료
+                    stopVoiceAnalysis()
+                }
+            }
+        }
+    }
+    
+    private fun startVoiceAnalysis() {
+        val bufferSize = AudioRecord.getMinBufferSize(
+            44100,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+        
+        // VOICE_CALL 또는 VOICE_COMMUNICATION 소스 사용
+        audioRecord = AudioRecord(
+            MediaRecorder.AudioSource.VOICE_CALL,
+            44100,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            bufferSize
+        )
+        
+        audioRecord?.startRecording()
+        
+        // 백그라운드 스레드에서 분석
+        Thread { analyzeAudioLoop() }.start()
+    }
+    
+    private fun analyzeAudioLoop() {
+        val buffer = ShortArray(1024)
+        
+        while (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+            val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+            
+            if (read > 0) {
+                // 분석
+                val loudness = analyzer.analyzeLoudness(buffer)
+                val isModulated = analyzer.isModulated(loudness)
+                
+                // 연속 탐지 버퍼
+                detectionBuffer.add(isModulated)
+                if (detectionBuffer.size > 5) {
+                    detectionBuffer.removeAt(0)
+                }
+                
+                // 5번 중 3번 이상 탐지 → 알림
+                val detectionCount = detectionBuffer.count { it }
+                if (detectionCount >= 3) {
+                    AlertManager.showWarning(this)
+                }
+            }
+        }
+    }
+    
+    private fun stopVoiceAnalysis() {
+        audioRecord?.stop()
+        audioRecord?.release()
+        audioRecord = null
+        detectionBuffer.clear()
+    }
+}
+
+
+----- AlertManager.kt -----
+
+object AlertManager {
+    fun showWarning(context: Context) {
+        // 알림 생성
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_warning)
+            .setContentTitle("⚠️ 보이스피싱 경고")
+            .setContentText("변조된 목소리가 감지되었습니다!")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVibrate(longArrayOf(0, 500, 200, 500))
+            .setAutoCancel(true)
+            .build()
+        
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
+        notificationManager.notify(ALERT_ID, notification)
+        
+        // 진동
+        val vibrator = context.getSystemService(Vibrator::class.java)
+        vibrator?.vibrate(VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE))
+    }
+}
+
+
+----- MainActivity.kt -----
+
+class MainActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        
+        // 권한 요청
+        requestPermissions()
+        
+        // 서비스 시작 버튼
+        findViewById<Button>(R.id.btnStart).setOnClickListener {
+            startVoiceGuardService()
+        }
+        
+        // 통계 표시
+        updateStatistics()
+    }
+    
+    private fun requestPermissions() {
+        val permissions = arrayOf(
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.POST_NOTIFICATIONS
+        )
+        
+        ActivityCompat.requestPermissions(this, permissions, REQUEST_CODE)
+    }
+    
+    private fun startVoiceGuardService() {
+        val intent = Intent(this, CallMonitorService::class.java)
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+    }
+}
+
+
+================================================================================
+📦 6. 필요한 라이브러리 (build.gradle.kts)
+================================================================================
+
+dependencies {
+    // FFT 라이브러리
+    implementation("com.github.wendykierp:JTransforms:3.1")
+    
+    // 또는 KissFFT (NDK)
+    // implementation("com.github.jtransforms:jtransforms:3.1")
+    
+    // 기본 Android
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.11.0")
+}
+
+
+================================================================================
+🎨 7. UI 레이아웃 (activity_main.xml)
+================================================================================
+
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:gravity="center">
+    
+    <!-- 로고 -->
+    <ImageView
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:src="@drawable/ic_shield"
+        android:contentDescription="VoiceGuard Logo" />
+    
+    <!-- 제목 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="보이스가드"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp" />
+    
+    <!-- 상태 -->
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="대기 중"
+        android:textSize="18sp"
+        android:layout_marginTop="8dp" />
+    
+    <!-- 통계 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="32dp"
+        android:padding="16dp"
+        android:background="@drawable/rounded_background">
+        
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="오늘의 통계"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+        
+        <TextView
+            android:id="@+id/tvTotalCalls"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="총 통화: 0건"
+            android:layout_marginTop="8dp" />
+        
+        <TextView
+            android:id="@+id/tvDetections"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="변조 탐지: 0건"
+            android:layout_marginTop="4dp" />
+    </LinearLayout>
+    
+    <!-- 시작/중지 버튼 -->
+    <Button
+        android:id="@+id/btnStart"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="보호 시작"
+        android:textSize="18sp"
+        android:layout_marginTop="32dp" />
+    
+    <!-- 설정 버튼 -->
+    <Button
+        android:id="@+id/btnSettings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="설정"
+        android:layout_marginTop="8dp"
+        style="?android:attr/borderlessButtonStyle" />
+</LinearLayout>
+
+
+================================================================================
+⚙️ 8. 개발 단계
+================================================================================
+
+Phase 1: 기본 구조 (1-2주)
+□ 안드로이드 스튜디오 프로젝트 생성
+□ 권한 설정 및 요청
+□ Foreground Service 구현
+□ 통화 감지 기능
+
+Phase 2: 핵심 기능 (2-3주)
+□ AudioRecord 오디오 캡처
+□ FFT 라이브러리 통합
+□ 0-100Hz loudness 계산
+□ 변조 판별 로직
+□ 알림 시스템
+
+Phase 3: UI 및 최적화 (1-2주)
+□ 메인 화면 디자인
+□ 통계 화면
+□ 설정 화면 (민감도 조정)
+□ 배터리 최적화
+□ 메모리 누수 수정
+
+Phase 4: 테스트 및 출시 (2-3주)
+□ 실제 환경 테스트
+□ 다양한 기기 테스트
+□ 베타 테스터 모집
+□ 버그 수정
+□ 구글 플레이 등록
+
+
+================================================================================
+🚨 9. 주의사항 및 해결책
+================================================================================
+
+문제 1: Android 10+ 통화 음성 접근 제한
+해결책:
+- Accessibility Service 사용
+- VOICE_COMMUNICATION 소스 사용
+- 사용자에게 Accessibility 권한 안내
+
+문제 2: 배터리 소모
+해결책:
+- 통화 중에만 작동
+- 샘플링 레이트 최적화 (44100Hz → 16000Hz 고려)
+- 무음 구간 스킵
+
+문제 3: 백그라운드 실행 제한
+해결책:
+- Foreground Service 사용 (필수)
+- 알림 항상 표시
+- 배터리 최적화 제외 요청
+
+문제 4: 오탐률
+해결책:
+- 연속 3회 이상 탐지 시에만 알림
+- 임계값 조정 가능하게 (설정)
+- 사용자 피드백 수집
+
+
+================================================================================
+📊 10. 성능 목표
+================================================================================
+
+처리 속도: 0.5초당 1회 분석 (실시간)
+배터리 소모: 시간당 5-10%
+메모리 사용: 50MB 이하
+정확도: 95% 이상
+오탐률: 5% 이하
+
+
+================================================================================
+🔒 11. 개인정보 보호
+================================================================================
+
+중요:
+- 음성은 실시간 분석만, 저장하지 않음
+- 통화 내용 녹음 금지
+- 전화번호는 통계용으로만 (암호화)
+- 개인정보 처리방침 필수
+- 사용자 동의 필수
+
+
+================================================================================
+💰 12. 수익 모델 (선택)
+================================================================================
+
+무료 버전:
+- 기본 탐지 기능
+- 광고 포함 (하단 배너)
+
+프리미엄 버전 (₩4,900):
+- 광고 제거
+- 실시간 주파수 그래프
+- 통화 기록 상세 분석
+- 커스텀 임계값
+- 화이트리스트 기능
+
+
+================================================================================
+📱 13. 구글 플레이 등록 체크리스트
+================================================================================
+
+□ 앱 아이콘 (512x512px)
+□ 스크린샷 (최소 2장)
+□ 앱 설명 (한국어/영어)
+□ 개인정보 처리방침 URL
+□ 콘텐츠 등급 설정
+□ 권한 사용 사유 설명
+□ APK/AAB 업로드
+□ 가격 설정 (무료/유료)
+□ 출시 국가 선택
+
+
+================================================================================
+🎯 14. Claude Code에게 요청할 내용
+================================================================================
+
+"안드로이드 스튜디오로 보이스피싱 방어 앱을 만들어줘.
+
+핵심 기능:
+1. 통화 중 음성을 0.5초마다 분석
+2. FFT로 0-100Hz 대역 loudness 측정
+3. 임계값(0.003) 초과 시 알림
+
+구현 요청사항:
+- Kotlin 사용
+- Foreground Service로 백그라운드 실행
+- AudioRecord로 통화 음성 캡처
+- JTransforms 라이브러리로 FFT 처리
+- 간단한 Material Design UI
+
+위의 가이드 문서를 참고해서 만들어줘."
+
+
+================================================================================
+📝 15. 추가 개선 아이디어 (Phase 2)
+================================================================================
+
+- AI 모델 통합 (TensorFlow Lite)
+- 클라우드 업데이트 (새로운 변조 패턴)
+- 보이스피싱 번호 DB 연동
+- 통화 녹음 + 분석 리포트
+- 가족 공유 기능
+- 긴급 신고 버튼
+- 위치 기반 통계 (지역별 보이스피싱 발생률)
+
+
+================================================================================
+🔗 16. 유용한 참고 자료
+================================================================================
+
+Android 공식 문서:
+- AudioRecord: https://developer.android.com/reference/android/media/AudioRecord
+- Foreground Service: https://developer.android.com/develop/background-work/services/foreground-services
+- Notifications: https://developer.android.com/develop/ui/views/notifications
+
+FFT 라이브러리:
+- JTransforms: https://github.com/wendykierp/JTransforms
+- KissFFT: https://github.com/mborgerding/kissfft
+
+통화 감지:
+- PhoneStateListener: https://developer.android.com/reference/android/telephony/PhoneStateListener
+
+
+================================================================================
+✅ 17. 최종 체크리스트
+================================================================================
+
+개발 전:
+□ 안드로이드 스튜디오 설치
+□ Kotlin 기본 지식
+□ 테스트용 안드로이드 기기 준비
+□ 이 가이드 문서 숙지
+
+개발 중:
+□ Git으로 버전 관리
+□ 자주 테스트
+□ 로그 활용 (Logcat)
+□ 메모리 프로파일링
+
+출시 전:
+□ 다양한 기기 테스트
+□ 베타 테스트
+□ 법적 검토 (개인정보)
+□ 구글 플레이 정책 확인
+
+
+================================================================================
+💬 18. Claude Code 사용 팁
+================================================================================
+
+효과적인 요청 방법:
+1. 한 번에 한 컴포넌트씩 요청
+   예: "먼저 CallMonitorService만 만들어줘"
+
+2. 구체적인 요구사항 명시
+   예: "JTransforms 라이브러리를 사용해서 FFT 구현해줘"
+
+3. 오류 발생 시 로그 공유
+   예: "이런 오류가 나는데 수정해줘: [로그]"
+
+4. 단계별 확인
+   예: "일단 통화 감지만 되는지 테스트 코드 만들어줘"
+
+
+================================================================================
+🎉 완료!
+================================================================================
+
+이 가이드를 참고해서 Claude Code에게 요청하면 
+멋진 보이스피싱 방어 앱을 만들 수 있습니다!
+
+화이팅! 🚀
+
+
+================================================================================
+📞 문의사항
+================================================================================
+
+Python 프로토타입 관련:
+- collect_data.py: 데이터 수집
+- train_model.py: AI 모델 학습
+- realtime_ai_detector.py: 실시간 탐지
+
+모두 정상 작동 확인 완료 ✅
+
+안드로이드 개발 중 막히는 부분이 있으면 
+이 가이드와 함께 Claude에게 물어보세요!
+
+================================================================================
+================================================================================
+🤖 19. 실제 구현된 개선 알고리즘 (추가!)
+================================================================================
+
+[중요] 기본 가이드는 단순 버전입니다.
+실제로 Python에서 테스트한 개선 버전은 다음과 같습니다:
+
+
+----- 개선된 탐지 알고리즘 -----
+
+특징:
+1. 8개 특징 사용 (0-100Hz, 100-200Hz, 200-300Hz, 4-8kHz, 16kHz+, 
+                 Total Energy, Spectral Centroid, ZCR)
+2. AI 모델 신뢰도 임계값: 0.80 (80% 이상 확신할 때만)
+3. 특징 기반 검증:
+   - 0-100Hz >= 0.002 또는
+   - 100-200Hz >= 0.0035
+4. 연속 탐지: 최근 5번 중 3번 이상 탐지되어야 알림
+5. 오탐 방지 카운터 추적
+
+
+----- Kotlin 구현 (개선 버전) -----
+
+class ImprovedVoiceAnalyzer {
+    // 임계값 설정
+    private val CONFIDENCE_THRESHOLD = 0.80f
+    private val LOUDNESS_0_100_MIN = 0.0020f
+    private val LOUDNESS_100_200_MIN = 0.0035f
+    private val CONSECUTIVE_THRESHOLD = 3
+    
+    // 연속 탐지 버퍼
+    private val predictionBuffer = ArrayDeque<PredictionResult>(5)
+    
+    // 오탐 방지 카운터
+    private var falsePositivePrevention = 0
+    
+    data class AudioFeatures(
+        val loudness0to100: Float,
+        val loudness100to200: Float,
+        val loudness200to300: Float,
+        val loudness4to8k: Float,
+        val loudness16kPlus: Float,
+        val totalEnergy: Float,
+        val spectralCentroid: Float,
+        val zcr: Float
+    )
+    
+    data class PredictionResult(
+        val prediction: Int,  // 0=정상, 1=변조
+        val probability: Float,
+        val loudness0to100: Float,
+        val loudness100to200: Float
+    )
+    
+    data class DetectionResult(
+        val isModulated: Boolean,
+        val confidence: Float,
+        val aiConfidence: Float,
+        val hasSignature: Boolean,
+        val bufferCount: String,
+        val falsePositivePrevented: Int
+    )
+    
+    fun extractFeatures(audioFrame: ShortArray): AudioFeatures {
+        // FFT 수행
+        val fftMagnitude = performFFT(audioFrame)
+        val freqs = getFrequencies(audioFrame.size)
+        
+        return AudioFeatures(
+            loudness0to100 = calculateBandLoudness(fftMagnitude, freqs, 0f, 100f),
+            loudness100to200 = calculateBandLoudness(fftMagnitude, freqs, 100f, 200f),
+            loudness200to300 = calculateBandLoudness(fftMagnitude, freqs, 200f, 300f),
+            loudness4to8k = calculateBandLoudness(fftMagnitude, freqs, 4000f, 8000f),
+            loudness16kPlus = calculateBandLoudness(fftMagnitude, freqs, 16000f, 22050f),
+            totalEnergy = fftMagnitude.sumOf { (it * it).toDouble() }.toFloat(),
+            spectralCentroid = calculateSpectralCentroid(fftMagnitude, freqs),
+            zcr = calculateZCR(audioFrame)
+        )
+    }
+    
+    fun predictImproved(audioFrame: ShortArray, aiModel: AIModel?): DetectionResult {
+        // 1. 특징 추출
+        val features = extractFeatures(audioFrame)
+        
+        // 2. AI 예측 (모델이 있으면)
+        val aiPrediction: Int
+        val aiProbability: Float
+        
+        if (aiModel != null) {
+            val (pred, prob) = aiModel.predict(features)
+            aiPrediction = pred
+            aiProbability = prob
+        } else {
+            // AI 모델 없으면 규칙 기반
+            aiPrediction = if (features.loudness0to100 >= 0.003f) 1 else 0
+            aiProbability = if (aiPrediction == 1) 0.9f else 0.1f
+        }
+        
+        // 3. 특징 기반 검증
+        val hasSignature = (
+            features.loudness0to100 >= LOUDNESS_0_100_MIN ||
+            features.loudness100to200 >= LOUDNESS_100_200_MIN
+        )
+        
+        // 4. AI + 규칙 결합
+        val framePrediction: Int = if (aiPrediction == 1) {
+            if (aiProbability >= CONFIDENCE_THRESHOLD && hasSignature) {
+                // 신뢰도 높고 + 명확한 특징 → 변조
+                1
+            } else {
+                // 조건 불충분 → 정상으로 수정
+                falsePositivePrevention++
+                0
+            }
+        } else {
+            0
+        }
+        
+        // 5. 버퍼에 추가
+        predictionBuffer.addLast(
+            PredictionResult(
+                prediction = framePrediction,
+                probability = aiProbability,
+                loudness0to100 = features.loudness0to100,
+                loudness100to200 = features.loudness100to200
+            )
+        )
+        
+        if (predictionBuffer.size > 5) {
+            predictionBuffer.removeFirst()
+        }
+        
+        // 6. 연속 탐지 (스무딩)
+        val isModulated: Boolean
+        val avgProbability: Float
+        
+        if (predictionBuffer.size >= 3) {
+            val modulatedCount = predictionBuffer.count { it.prediction == 1 }
+            isModulated = modulatedCount >= CONSECUTIVE_THRESHOLD
+            avgProbability = predictionBuffer.map { it.probability }.average().toFloat()
+        } else {
+            isModulated = false
+            avgProbability = 0.5f
+        }
+        
+        return DetectionResult(
+            isModulated = isModulated,
+            confidence = if (isModulated) avgProbability else 1 - avgProbability,
+            aiConfidence = aiProbability,
+            hasSignature = hasSignature,
+            bufferCount = "${predictionBuffer.count { it.prediction == 1 }}/${predictionBuffer.size}",
+            falsePositivePrevented = falsePositivePrevention
+        )
+    }
+    
+    private fun calculateBandLoudness(
+        fftMagnitude: FloatArray,
+        freqs: FloatArray,
+        minFreq: Float,
+        maxFreq: Float
+    ): Float {
+        var sum = 0f
+        var count = 0
+        
+        for (i in fftMagnitude.indices) {
+            if (freqs[i] in minFreq..maxFreq) {
+                sum += fftMagnitude[i]
+                count++
+            }
+        }
+        
+        return if (count > 0) sum / count else 0f
+    }
+    
+    private fun calculateSpectralCentroid(
+        fftMagnitude: FloatArray,
+        freqs: FloatArray
+    ): Float {
+        var numerator = 0f
+        var denominator = 0f
+        
+        for (i in fftMagnitude.indices) {
+            numerator += freqs[i] * fftMagnitude[i]
+            denominator += fftMagnitude[i]
+        }
+        
+        return if (denominator > 0) numerator / denominator else 0f
+    }
+    
+    private fun calculateZCR(audioFrame: ShortArray): Float {
+        var count = 0
+        for (i in 1 until audioFrame.size) {
+            if ((audioFrame[i] >= 0 && audioFrame[i-1] < 0) ||
+                (audioFrame[i] < 0 && audioFrame[i-1] >= 0)) {
+                count++
+            }
+        }
+        return count.toFloat() / (2 * audioFrame.size)
+    }
+}
+
+
+----- CallMonitorService.kt (개선 버전) -----
+
+class CallMonitorService : Service() {
+    private val analyzer = ImprovedVoiceAnalyzer()
+    private var aiModel: AIModel? = null  // TFLite 모델 (선택)
+    
+    private fun analyzeAudioLoop() {
+        val buffer = ShortArray(1024)
+        
+        while (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+            val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+            
+            if (read > 0) {
+                // 개선된 분석
+                val result = analyzer.predictImproved(buffer, aiModel)
+                
+                // 변조 탐지 시
+                if (result.isModulated) {
+                    AlertManager.showWarning(
+                        context = this,
+                        confidence = result.confidence,
+                        details = "신뢰도: ${(result.confidence * 100).toInt()}%\n" +
+                                 "AI 확률: ${(result.aiConfidence * 100).toInt()}%\n" +
+                                 "버퍼: ${result.bufferCount}\n" +
+                                 "특징 검출: ${if (result.hasSignature) "있음" else "없음"}"
+                    )
+                }
+                
+                // 로그 (디버그용)
+                Log.d(TAG, "변조: ${result.isModulated}, " +
+                           "신뢰도: ${result.confidence}, " +
+                           "오탐방지: ${result.falsePositivePrevented}")
+            }
+        }
+    }
+}
+
+
+================================================================================
+🎯 20. 두 가지 구현 옵션
+================================================================================
+
+옵션 A: 간단한 버전 (빠른 출시)
+- 0-100Hz > 0.003만 체크
+- AI 모델 없음
+- 앱 용량 작음
+- 정확도: ~90%
+
+옵션 B: 개선된 버전 (Python에서 검증됨)
+- 8개 특징 사용
+- AI 모델 옵션 (TFLite)
+- 오탐 방지 로직
+- 정확도: ~98%
+
+추천: A로 시작 → 나중에 B로 업그레이드
+
+
+================================================================================
+📱 21. AI 모델 통합 (옵션 B 선택 시)
+================================================================================
+
+----- AIModel.kt (TFLite 래퍼) -----
+
+class AIModel(context: Context) {
+    private val interpreter: Interpreter
+    
+    init {
+        // assets에서 모델 로드
+        val modelFile = loadModelFile(context, "voice_classifier.tflite")
+        interpreter = Interpreter(modelFile)
+    }
+    
+    fun predict(features: ImprovedVoiceAnalyzer.AudioFeatures): Pair<Int, Float> {
+        // 입력 배열 (8개 특징)
+        val input = floatArrayOf(
+            features.loudness0to100,
+            features.loudness100to200,
+            features.loudness200to300,
+            features.loudness4to8k,
+            features.loudness16kPlus,
+            features.totalEnergy,
+            features.spectralCentroid,
+            features.zcr
+        )
+        
+        // 출력 배열 [정상 확률, 변조 확률]
+        val output = Array(1) { FloatArray(2) }
+        
+        // 예측
+        interpreter.run(input, output)
+        
+        val normalProb = output[0][0]
+        val modulatedProb = output[0][1]
+        
+        val prediction = if (modulatedProb > normalProb) 1 else 0
+        val confidence = maxOf(normalProb, modulatedProb)
+        
+        return Pair(prediction, confidence)
+    }
+    
+    private fun loadModelFile(context: Context, filename: String): ByteBuffer {
+        val assetFileDescriptor = context.assets.openFd(filename)
+        val inputStream = FileInputStream(assetFileDescriptor.fileDescriptor)
+        val fileChannel = inputStream.channel
+        val startOffset = assetFileDescriptor.startOffset
+        val declaredLength = assetFileDescriptor.declaredLength
+        
+        return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
+    }
+    
+    fun close() {
+        interpreter.close()
+    }
+}
+
+
+----- build.gradle.kts 추가 -----
+
+dependencies {
+    // TensorFlow Lite
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+}
+
+
+================================================================================
+```
+
+---
+
+## ✅ **정리:**
+
+### **현재 txt 파일:**
+- ❌ 기본 규칙만 (0-100Hz > 0.003)
+
+### **실제 구현:**
+- ✅ AI 모델 + 8개 특징
+- ✅ 신뢰도 임계값 0.80
+- ✅ 연속 탐지 (5번 중 3번)
+- ✅ 오탐 방지
+
+---
+
+## 🎯 **Claude Code에게 줄 최종 요청:**
+```
+"위의 가이드 중 '19. 실제 구현된 개선 알고리즘' 부분의
+ImprovedVoiceAnalyzer 클래스를 사용해서 앱을 만들어줘.
+
+특히:
+- 8개 특징 추출
+- 신뢰도 임계값 0.80
+- 연속 탐지 (5번 중 3번)
+- 오탐 방지 로직
+
+모두 포함해줘!"

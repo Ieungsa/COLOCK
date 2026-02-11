@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Mind Shield AI</string>
+    <string name="accessibility_service_description">마인드-실드 AI가 실시간으로 화면의 사기 시나리오를 분석하여 사용자를 보호합니다.</string>
+</resources>

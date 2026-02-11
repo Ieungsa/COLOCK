@@ -18,14 +18,7 @@ local.properties
 **/kspCaches/
 **/outputs/
 
-# Large Projects & Temporary Folders
-Ieungsa_Project/
-new_korean_model_distilkobert/
-vosk-model-ko-0.22/
-zoom_logo.py
-.claude/
-
-# Security & Keys
+# Security & Keys (Keep these secure!)
 **/google-services.json
 *.jks
 *.keystore

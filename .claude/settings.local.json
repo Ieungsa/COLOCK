@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.gradlew build)",
+      "Bash(gradlew.bat build:*)",
+      "Bash(./gradlew:*)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\c\\Users\\82105"
+    ]
+  }
+}

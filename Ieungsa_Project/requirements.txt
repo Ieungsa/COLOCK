@@ -1,0 +1,11 @@
+tensorflow
+pandas
+scikit-learn
+requests
+transformers==4.30.0
+torch
+datasets
+tensorflow-text
+numpy<2.0.0
+sentencepiece
+keras<3.0.0

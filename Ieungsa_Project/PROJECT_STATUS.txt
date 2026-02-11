@@ -1,0 +1,55 @@
+# Android 실시간 보이스피싱 탐지 시스템 구축 진행 상황 요약
+
+## 1. 프로젝트 목표
+Android 기반의 실시간 보이스피싱 탐지 시스템 구축.
+- 통화 감지 → 오디오 캡처 → STT (Vosk) → 텍스트 분류 (DistilKoBERT TFLite) → 위험 알림
+
+## 2. 진행된 Phase 및 주요 변경 사항
+
+### Phase 1: 프로젝트 기본 설정 (완료)
+- **Android Studio 프로젝트 생성**: 기존 프로젝트 확인.
+- **권한 추가 (AndroidManifest.xml)**: 대부분의 필수 권한(`READ_PHONE_STATE`, `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `POST_NOTIFICATIONS`, `INTERNET`, `READ_CALL_LOG`, `SYSTEM_ALERT_WINDOW`)은 이미 존재했음.
+- **의존성 추가 (build.gradle.kts)**: `vosk-android`, `tensorflow-lite`, `tensorflow-lite-support` 의존성 이미 존재했음.
+
+### Phase 2: 통화 감지 및 오디오 캡처 (완료)
+- `CallMonitorService.kt` 파일 분석 결과, 통화 상태 감지 및 Foreground Service 구현이 이미 존재했음.
+- `AudioRecord`를 이용한 오디오 캡처 로직도 존재했으나, `VOICE_CALL` 소스 접근 문제 발생.
+- **해결**: `AudioRecord` 대신 BCR(Basic Call Recorder) 앱의 녹음 파일을 실시간으로 모니터링하는 방식으로 전환.
+
+### Phase 3: STT 엔진 구축 (완료)
+- `CallMonitorService.kt`에 Vosk STT 통합 로직이 이미 존재했음.
+- `vosk-model-small-ko` 모델이 `app/src/main/assets/`에 이미 배치되어 있었음.
+- **문제 발생**: `StorageService.unpack` 사용 시 `FileNotFoundException: vosk-model-small-ko/uuid` 및 `NullPointerException` 발생.
+- **해결**: `StorageService.unpack` 대신 `CallMonitorService.kt` 내에 `copyAssetToInternalStorage` 헬퍼 함수를 구현하여 Vosk 모델을 assets에서 내부 저장소로 수동으로 복사하도록 변경.
+
+### Phase 4: 피싱 탐지 모델 준비 (완료)
+- **Python 환경 설정**: `requirements.txt`에 `transformers`, `torch`, `datasets`, `tensorflow-text`, `numpy<2.0.0`, `keras<3.0.0` 추가 및 설치.
+- **DistilKoBERT Fine-tuning 및 TFLite 변환**: `train_distilkobert_model.py` 스크립트 생성 및 실행.
+    - 데이터 로딩, 토큰화, DistilKoBERT 모델 학습, 평가, TFLite 변환, `vocab.txt` 생성 및 Android assets 폴더로 복사 완료.
+    - **문제 발생**: `TFAutoModelForSequenceClassification` 임포트 오류, `numpy` 버전 충돌, `keras.__internal__` 모듈 오류 발생.
+    - **해결**: `transformers` 버전 다운그레이드(`4.30.0`), `numpy` 및 `keras` 버전 제한(`numpy<2.0.0`, `keras<3.0.0`), `tensorflow` CPU 강제 사용(`os.environ["CUDA_VISIBLE_DEVICES"] = "-1"`), `token_type_ids` 제거 등 여러 차례 수정 및 재시도 끝에 스크립트 성공적으로 실행.
+- **TFLite 모델 및 Vocab 배포**: `phishing_detector_distilkobert.tflite` 및 `vocab.txt`가 `app/src/main/assets/`에 성공적으로 복사됨.
+
+### Phase 5: 안드로이드 통합 (진행 중 - BCR 연동 완료, STT 정확도 개선 필요)
+- `PhishingDetector.kt` 수정:
+    - `modelPath`를 `phishing_detector_distilkobert.tflite`로 변경.
+    - `DistilKoBertTokenizer.kt` 파일 생성 및 토큰화 로직 구현.
+    - `detect` 함수를 업데이트하여 토크나이저를 사용하고 TFLite 모델에 `input_ids`, `attention_mask`를 전달하며, 출력 로짓에 소프트맥스 적용.
+- **오디오 캡처 방식 변경 (BCR 연동)**:
+    - `AudioRecord` 사용 시 `VOICE_CALL` 소스 접근 문제 지속.
+    - 사용자 요청에 따라 BCR 앱의 녹음 파일을 실시간으로 모니터링하는 방식으로 전환.
+    - `AndroidManifest.xml`에 `READ_EXTERNAL_STORAGE`, `MANAGE_EXTERNAL_STORAGE` 권한 추가.
+    - `CallFileWatcher.kt` 파일 생성: BCR 녹음 폴더를 감시하고 새로 생성되는 `.wav` 파일의 오디오 데이터를 실시간으로 읽어 Vosk STT 엔진으로 전달.
+    - `CallMonitorService.kt` 리팩토링: `AudioRecord` 관련 코드 제거, `CallFileWatcher` 초기화 및 시작/중지 로직 통합.
+    - **문제 발생**: `FileObserver`가 BCR 녹음 파일 생성 이벤트를 감지하지 못함.
+    - **해결**: `CallFileWatcher.kt`를 `FileObserver` 방식에서 **주기적으로 폴더를 스캔하여 최신 `.wav` 파일을 찾아 테일링하는 방식**으로 변경. `currentFile` 스코프 문제 해결을 위해 `startWatching` 내에 로컬 변수 `currentTailingFile`을 사용하고 `startTailingFile`에 람다로 전달하는 방식으로 수정.
+
+## 3. 현재 상태 및 다음 단계
+- **현재 상태**: Android 앱 빌드 성공. Vosk 모델 로딩 및 `CallFileWatcher`를 통한 BCR 녹음 파일의 실시간 오디오 스트리밍 파이프라인이 작동함.
+- **남은 문제**: Vosk STT 모델(`vosk-model-small-ko`)의 음성 인식 정확도가 낮아 통화 내용을 제대로 이해하지 못함.
+- **다음 단계**: 현재 STT 정확도 문제를 분석하고 해결 방안을 모색해야 합니다.
+
+## 4. 사용자에게 필요한 조치
+- **BCR 녹음 경로 및 파일 형식 확인**: BCR이 `/sdcard/Music/`에 `.wav` 파일로 녹음하는지 확인.
+- **앱 런타임 권한 부여**: '파일 및 미디어' (모든 파일 접근) 권한이 앱 설정에서 '허용됨'으로 설정되어 있는지 확인.
+- **앱 재실행 및 로그캣 출력 공유**: 앱을 재빌드, 재설치하고 테스트 통화 진행 후 로그캣 출력을 공유하여 현재 STT 정확도 문제를 분석해야 합니다.
