@@ -34,4 +34,4 @@ COLOCK is an advanced mobile security application designed to protect users from
 2.  Provide API keys in the source code where indicated (`YOUR_API_KEY`).
 
 ---
-© 2026 KMOU Capstone Team
+© 2026 KMOU Ieungsa
